@@ -39,12 +39,16 @@ So, I believe this kind of precision tradeoff is more than acceptable, when it c
 Pros:
 1. It's up to 3 times faster on AVR-based Arduinos, and up to 20 times on SAMD21-based
 2. It has no significant precision penalty
-3. The API is identical to ResponsiveAnalogRead, so a switch is a mere replacement of one class/header name with the other
+3. The API is identical to ResponsiveAnalogRead: all you need to do is change the header and the class name
 
 Cons:
-1. It uses and extra library, [FixedPoints](https://github.com/Pharap/FixedPointsArduino)
+1. It uses an extra library, [FixedPoints](https://github.com/Pharap/FixedPointsArduino)
 2. ADC tweaks are only for SAMD21 and AVR boards at this moment.
 3. Probably no advantage over ResponsiveAnalogRead for MCUs with FPUs, i.e. Cortex-M4F or ESP32
+
+## Fair warning
+
+As of now, the library runs fine in a production code of an actual MIDI controller, the [MIDI Dobrynya](https://www.mididobrynya.com/). With that said, it has not been extensively tested and may contain bugs and possibly even traces of nuts.
 
 ## The original description of the library
 
