@@ -1,13 +1,11 @@
-// include the ResponsiveAnalogRead library
-#include <ResponsiveAnalogRead.h>
+// include the FastAnalogRead library
+#include <FastAnalogRead.h>
 
 // define the pin you want to use
 const int ANALOG_PIN = A0;
 
-// make a ResponsiveAnalogRead object, pass in the pin, and either true or false depending on if you want sleep enabled
-// enabling sleep will cause values to take less time to stop changing and potentially stop changing more abruptly,
-//   where as disabling sleep will cause values to ease into their correct position smoothly and more accurately
-ResponsiveAnalogRead analog(ANALOG_PIN, true);
+// make a FastAnalogRead object
+FastAnalogRead analog;
 
 // the next optional argument is snapMultiplier, which is set to 0.01 by default
 // you can pass it a value from 0 to 1 that controls the amount of easing
@@ -17,10 +15,16 @@ ResponsiveAnalogRead analog(ANALOG_PIN, true);
 void setup() {
   // begin serial so we can see analog read values through the serial monitor
   Serial.begin(9600);
+  // call a begin function, pass in the pin, and either true or false depending on if you want sleep enabled
+  // enabling sleep will cause values to take less time to stop changing and potentially stop changing more abruptly,
+  // where as disabling sleep will cause values to ease into their correct position smoothly and with slightly greater accuracy
+  analog.begin(ANALOG_PIN, true);
+  // enable faster ADC mode globally
+  FastAnalogRead::enableFastADC();
 }
 
 void loop() {
-  // update the ResponsiveAnalogRead object every loop
+  // update the FastAnalogRead object every loop
   analog.update();
 
   Serial.print(analog.getRawValue());

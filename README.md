@@ -1,8 +1,53 @@
-# ResponsiveAnalogRead
+# FastAnalogRead
 
-![ResponsiveAnalogRead](https://user-images.githubusercontent.com/345320/50956817-c4631a80-1510-11e9-806a-27583707ca91.jpg)
+## The Why
 
-ResponsiveAnalogRead is an Arduino library for eliminating noise in analogRead inputs without decreasing responsiveness. It sets out to achieve the following:
+FastAnalogRead is a fork of a brilliant [ResponsiveAnalogRead](https://github.com/dxinteractive/ResponsiveAnalogRead) by dxinteractive. However, as great as the algorithm of the original is, the library has two major problems:
+
+1. It uses floats as its numbers of choice, and
+2. It still uses native Arduino approach for reading analog lines.
+
+Floats are bad, unless you have a FPU-enabled microcontroller. They are, like, really slow. So for all of the AVR and SAMD21-based boards a better choice would be to eliminate them altogether. This library uses fixed point numbers and requires an extra library, [FixedPoints](https://github.com/Pharap/FixedPointsArduino).
+
+Arduino's analog reading is really slow, too. It may take as long as several milliseconds to do the thing, and, counter-intuitively, it's even worse on newer ARM-based Arduinos. That's why this library uses the [approach discussed here](https://www.avdweb.nl/arduino/adc-dac/fast-10-bit-adc). It's off by default, but there are static methods that enable or disable it on AVRs and SAMD21s. When envoked, the method will affect native `analogRead()` as well, not only the FastAnalogRead.
+
+So, how fast is it? I've benchmarked an Arduino Leonardo and an Arduino MKR Zero, by making 20000 readings on a single floating ADC pin:
+
+|            | ResponsiveAnalogRead, stock ADC | ResponsiveAnalogRead, fast ADC | FastAnalogRead, stock ADC | FastAnalogRead, fast ADC |
+| Arduino Leonardo | 5451 ms | 3729 ms | 3210 ms | 1787 ms |
+| Arduino MKR Zero | 18833 ms | 2425 ms | 17133 ms | 924 ms | 
+
+While it's shocking to see how ARM-based Arduinos are actually four times slower when it comes to ADC reading, it is also really satisfying to know that with all the tweaks it runs 20× faster than it was ever possible. Also, while Leonardo still has troubles with fixed point 32 bit numbers, ARM is natively 32 bit, so this alone makes it 5× faster:
+
+|            | ResponsiveAnalogRead calculations | FastAnalogRead calculations |
+| Arduino Leonardo | 3322 ms | 2001 ms |
+| Arduino MKR Zero | 2219 ms | 496 ms |
+
+What's the catch? Oh why, I'm glad you asked. Obviously, by replacing floats with fixes and by speeding up the ADC we're losing precision. The comparison of different ADC speeds [has already been made](https://www.avdweb.nl/arduino/adc-dac/fast-10-bit-adc), how about floats vs fixes? All values correspond to the ADC resolution, i.e. it's 6 out of 1024 for AVR and 83 out of 4096 for ARM.
+
+|            | Average delta, stock ADC | Max delta, stock ADC | Average delta, fast ADC | Max delta, fast ADC |
+| Arduino Leonardo | 0 | 6  | 0 | 1 |
+| Arduino MKR Zero | 0 | 83 | 0 | 13 | 
+
+So, I believe this kind of precision tradeoff is more than acceptable, when it comes to a floating (i.e., random) pin! If you need extra precision, you would want to begin with reducing noise in your analog line in the first place...
+
+## Pros and cons
+
+Pros:
+1. It's up to 3 times faster on AVR-based Arduinos, and up to 20 times on SAMD21-based
+2. It has no significant precision penalty
+3. The API is identical to ResponsiveAnalogRead, so a switch is a mere replacement of one class/header name with the other
+
+Cons:
+1. It uses and extra library, [FixedPoints](https://github.com/Pharap/FixedPointsArduino)
+2. ADC tweaks are only for SAMD21 and AVR boards at this moment.
+3. Probably no advantage over ResponsiveAnalogRead for MCUs with FPUs, i.e. Cortex-M4F or ESP32
+
+## The original description of the library
+
+![FastAnalogRead](https://user-images.githubusercontent.com/345320/50956817-c4631a80-1510-11e9-806a-27583707ca91.jpg)
+
+FastAnalogRead is an Arduino library for eliminating noise in analogRead inputs without decreasing responsiveness. It sets out to achieve the following:
 
 1. Be able to reduce large amounts of noise when reading a signal. So if a voltage is unchanging aside from noise, the values returned should never change due to noise alone.
 2. Be extremely responsive (i.e. not sluggish) when the voltage changes quickly.
@@ -18,16 +63,14 @@ An article discussing the design of the algorithm can be found [here](http://dam
 Here's a basic example:
 
 ```Arduino
-// include the ResponsiveAnalogRead library
-#include <ResponsiveAnalogRead.h>
+// include the FastAnalogRead library
+#include <FastAnalogRead.h>
 
 // define the pin you want to use
 const int ANALOG_PIN = A0;
 
-// make a ResponsiveAnalogRead object, pass in the pin, and either true or false depending on if you want sleep enabled
-// enabling sleep will cause values to take less time to stop changing and potentially stop changing more abruptly,
-// where as disabling sleep will cause values to ease into their correct position smoothly and with slightly greater accuracy
-ResponsiveAnalogRead analog(ANALOG_PIN, true);
+// make a FastAnalogRead object
+FastAnalogRead analog;
 
 // the next optional argument is snapMultiplier, which is set to 0.01 by default
 // you can pass it a value from 0 to 1 that controls the amount of easing
@@ -37,10 +80,16 @@ ResponsiveAnalogRead analog(ANALOG_PIN, true);
 void setup() {
   // begin serial so we can see analog read values through the serial monitor
   Serial.begin(9600);
+  // call a begin function, pass in the pin, and either true or false depending on if you want sleep enabled
+  // enabling sleep will cause values to take less time to stop changing and potentially stop changing more abruptly,
+  // where as disabling sleep will cause values to ease into their correct position smoothly and with slightly greater accuracy
+  analog.begin(ANALOG_PIN, true);
+  // enable faster ADC mode globally
+  FastAnalogRead::enableFastADC();
 }
 
 void loop() {
-  // update the ResponsiveAnalogRead object every loop
+  // update the FastAnalogRead object every loop
   analog.update();
 
   Serial.print(analog.getRawValue());
@@ -60,18 +109,21 @@ void loop() {
 ### Using your own ADC
 
 ```Arduino
-#include <ResponsiveAnalogRead.h>
+#include <FastAnalogRead.h>
 
-ResponsiveAnalogRead analog(0, true);
+FastAnalogRead analog;
 
 void setup() {
   // begin serial so we can see analog read values through the serial monitor
   Serial.begin(9600);
+  // initialize
+  analog.begin(0, true);
+  // obviously FastAnalogRead::enableFastADC() will do nothing with external ADC, so it's not here
 }
 
 void loop() {
   // read from your ADC
-  // update the ResponsiveAnalogRead object every loop
+  // update the FastAnalogRead object every loop
   int reading = YourADCReadMethod();
   analog.update(reading);
   Serial.print(analog.getValue());
@@ -84,18 +136,23 @@ void loop() {
 ### Smoothing multiple inputs
 
 ```Arduino
-#include <ResponsiveAnalogRead.h>
+#include <FastAnalogRead.h>
 
-ResponsiveAnalogRead analogOne(A1, true);
-ResponsiveAnalogRead analogTwo(A2, true);
+FastAnalogRead analogOne(A1, true);
+FastAnalogRead analogTwo(A2, true);
 
 void setup() {
   // begin serial so we can see analog read values through the serial monitor
   Serial.begin(9600);
+  // initialize both objects
+  analogOne.begin(A1, true);
+  analogTwo.begin(A2, true);
+  //  enable faster ADC mode globally
+  FastAnalogRead::enableFastADC();
 }
 
 void loop() {
-  // update the ResponsiveAnalogRead objects every loop
+  // update the FastAnalogRead objects every loop
   analogOne.update();
   analogTwo.update();
   
@@ -109,8 +166,10 @@ void loop() {
 
 ## How to install
 
-In the Arduino IDE, go to Sketch > Include libraries > Manage libraries, and search for ResponsiveAnalogRead.
+In the Arduino IDE, go to Sketch > Include libraries > Manage libraries, and search for FastAnalogRead.
 You can also just use the files directly from the src folder.
+
+You also need [FixedPoints](https://github.com/Pharap/FixedPointsArduino) library, which can be done in exactly the same way.
 
 Look at the example in the examples folder for an idea on how to use it in your own projects.
 The source files are also heavily commented, so check those out if you want fine control of the library's behaviour.
@@ -131,6 +190,13 @@ The source files are also heavily commented, so check those out if you want fine
 - `bool isSleeping() // returns true if the algorithm is in sleep mode (version 1.1.0+)`
 
 ## Other methods (settings)
+
+### Faster ADC (static)
+
+Works for SAMD21 (ARM) and AVR-based boards. Changes ADC speed globally, for all instances of FastAnalogRead or any other analog-reading functions.
+
+- `void enableFastADC()` 
+- `void disableFastADC()` 
 
 ### Sleep
 
@@ -163,7 +229,8 @@ If your ADC is something other than 10bit (1024), set that using this.
 
 Licensed under the MIT License (MIT)
 
-Copyright (c) 2016, Damien Clarke
+Copyright (c) 2021, Alexander Golovanov
+Original code is copyright (c) 2016, Damien Clarke
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

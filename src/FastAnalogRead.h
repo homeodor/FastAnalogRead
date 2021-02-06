@@ -1,5 +1,5 @@
 /*
- * ResponsiveAnalogRead.h
+ * FastAnalogRead.h
  * Arduino library for eliminating noise in analogRead inputs without decreasing responsiveness
  *
  * Copyright (c) 2016 Damien Clarke
@@ -23,12 +23,20 @@
  * SOFTWARE.  
  */
  
-#ifndef RESPONSIVE_ANALOG_READ_H
-#define RESPONSIVE_ANALOG_READ_H
+#ifndef FAST_ANALOG_READ_H
+#define FAST_ANALOG_READ_H
 
 #include <Arduino.h>
+#include <FixedPoints.h>
+#include <FixedPointsCommon.h>
 
-class ResponsiveAnalogRead
+#ifdef FAST_ANALOG_16BIT
+  typedef SFixed<16,15> FastAnalogFixed;
+#else
+  typedef SFixed<15,16> FastAnalogFixed;
+#endif
+
+class FastAnalogRead
 {
   public:
 
@@ -39,51 +47,59 @@ class ResponsiveAnalogRead
     //   increase this to lessen the amount of easing (such as 0.1) and make the responsive values more responsive
     //   but doing so may cause more noise to seep through if sleep is not enabled
     
-    ResponsiveAnalogRead(){};  //default constructor must be followed by call to begin function
-    ResponsiveAnalogRead(int pin, bool sleepEnable, float snapMultiplier = 0.01){
+    FastAnalogRead(){
+      analogResolution = FastAnalogFixed(1024);
+    };  //default constructor must be followed by call to begin function
+    FastAnalogRead(int pin, bool sleepEnable, FastAnalogFixed snapMultiplier = 0.01){
         begin(pin, sleepEnable, snapMultiplier);
     };
 
-    void begin(int pin, bool sleepEnable, float snapMultiplier = 0.01);  // use with default constructor to initialize 
+    void begin(int pin, bool sleepEnable, FastAnalogFixed snapMultiplier = 0.01);  // use with default constructor to initialize 
     
-    inline int getValue() { return responsiveValue; } // get the responsive value from last update
-    inline int getRawValue() { return rawValue; } // get the raw analogRead() value from last update
+    inline uint16_t getValue()    { return responsiveValue; } // get the responsive value from last update
+    inline uint16_t getRawValue() { return rawValue; } // get the raw analogRead() value from last update
     inline bool hasChanged() { return responsiveValueHasChanged; } // returns true if the responsive value has changed during the last update
     inline bool isSleeping() { return sleeping; } // returns true if the algorithm is currently in sleeping mode
     void update(); // updates the value by performing an analogRead() and calculating a responsive value based off it
-    void update(int rawValueRead); // updates the value accepting a value and calculating a responsive value based off it
+    void update(uint16_t rawValueRead); // updates the value accepting a value and calculating a responsive value based off it
 
-    void setSnapMultiplier(float newMultiplier);
+    void setSnapMultiplier(FastAnalogFixed newMultiplier);
     inline void enableSleep() { sleepEnable = true; }
     inline void disableSleep() { sleepEnable = false; }
     inline void enableEdgeSnap() { edgeSnapEnable = true; }
     // edge snap ensures that values at the edges of the spectrum (0 and 1023) can be easily reached when sleep is enabled
     inline void disableEdgeSnap() { edgeSnapEnable = false; }
-    inline void setActivityThreshold(float newThreshold) { activityThreshold = newThreshold; }
+    inline void setActivityThreshold(FastAnalogFixed newThreshold) { activityThreshold = newThreshold; }
     // the amount of movement that must take place to register as activity and start moving the output value. Defaults to 4.0
-    inline void setAnalogResolution(int resolution) { analogResolution = resolution; }
+    inline void setAnalogResolution(uint16_t resolution) { analogResolution = resolution; }
     // if your ADC is something other than 10bit (1024), set that here
 
+    static void enableFastADC(bool enable = true);
+    static void disableFastADC() { enableFastADC(false); }
+
   private:
-    int pin;
-    int analogResolution = 1024;
-    float snapMultiplier;
+
+    static const FastAnalogFixed const_c0, const_c1, const_c2;
+
+    uint_fast8_t pin;
+    FastAnalogFixed analogResolution;
+    FastAnalogFixed snapMultiplier;
     bool sleepEnable;
-    float activityThreshold = 4.0;
+    FastAnalogFixed activityThreshold = FastAnalogFixed(4,0);
     bool edgeSnapEnable = true;
 
-    float smoothValue;
+    FastAnalogFixed smoothValue;
     unsigned long lastActivityMS;
-    float errorEMA = 0.0;
+    FastAnalogFixed errorEMA = 0.0;
     bool sleeping = false;
 
-    int rawValue;
-    int responsiveValue;
-    int prevResponsiveValue;
+    uint16_t rawValue;
+    uint16_t responsiveValue;
+    uint16_t prevResponsiveValue;
     bool responsiveValueHasChanged;
 
-    int getResponsiveValue(int newValue);
-    float snapCurve(float x);
+    int getResponsiveValue(FastAnalogFixed newValue);
+    FastAnalogFixed snapCurve(FastAnalogFixed x);
 };
 
 #endif
