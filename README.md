@@ -14,18 +14,21 @@ Arduino's analog reading is really slow, too. It may take as long as several mil
 So, how fast is it? I've benchmarked an Arduino Leonardo and an Arduino MKR Zero, by making 20000 readings on a single floating ADC pin:
 
 |            | ResponsiveAnalogRead, stock ADC | ResponsiveAnalogRead, fast ADC | FastAnalogRead, stock ADC | FastAnalogRead, fast ADC |
+| --- | --- | --- | --- | --- |
 | Arduino Leonardo | 5451 ms | 3729 ms | 3210 ms | 1787 ms |
 | Arduino MKR Zero | 18833 ms | 2425 ms | 17133 ms | 924 ms | 
 
 While it's shocking to see how ARM-based Arduinos are actually four times slower when it comes to ADC reading, it is also really satisfying to know that with all the tweaks it runs 20× faster than it was ever possible. Also, while Leonardo still has troubles with fixed point 32 bit numbers, ARM is natively 32 bit, so this alone makes it 5× faster:
 
 |            | ResponsiveAnalogRead calculations | FastAnalogRead calculations |
+| --- | --- | --- |
 | Arduino Leonardo | 3322 ms | 2001 ms |
 | Arduino MKR Zero | 2219 ms | 496 ms |
 
 What's the catch? Oh why, I'm glad you asked. Obviously, by replacing floats with fixes and by speeding up the ADC we're losing precision. The comparison of different ADC speeds [has already been made](https://www.avdweb.nl/arduino/adc-dac/fast-10-bit-adc), how about floats vs fixes? All values correspond to the ADC resolution, i.e. it's 6 out of 1024 for AVR and 83 out of 4096 for ARM.
 
 |            | Average delta, stock ADC | Max delta, stock ADC | Average delta, fast ADC | Max delta, fast ADC |
+| --- | --- | --- | --- | --- |
 | Arduino Leonardo | 0 | 6  | 0 | 1 |
 | Arduino MKR Zero | 0 | 83 | 0 | 13 | 
 
