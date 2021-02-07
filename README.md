@@ -2,14 +2,16 @@
 
 ## The Why
 
-FastAnalogRead is a fork of a brilliant [ResponsiveAnalogRead](https://github.com/dxinteractive/ResponsiveAnalogRead) by dxinteractive. However, as great as the algorithm of the original is, the library has two major problems:
+FastAnalogRead is a fork of a brilliant [ResponsiveAnalogRead](https://github.com/dxinteractive/ResponsiveAnalogRead) by dxinteractive. As the name implies, it aims to be faster!
+
+As great as the algorithm of the original is, the library has two major problems:
 
 1. It uses floats as its numbers of choice, and
 2. It still uses native Arduino approach for reading analog lines.
 
 Floats are bad, unless you have a FPU-enabled microcontroller. They are, like, really slow. So for all of the AVR and SAMD21-based boards a better choice would be to eliminate them altogether. This library uses fixed point numbers and requires an extra library, [FixedPoints](https://github.com/Pharap/FixedPointsArduino).
 
-Arduino's analog reading is really slow, too. It may take as long as several milliseconds to do the thing, and, counter-intuitively, it's even worse on newer ARM-based Arduinos. That's why this library uses the [approach discussed here](https://www.avdweb.nl/arduino/adc-dac/fast-10-bit-adc). It's off by default, but there are static methods that enable or disable it on AVRs and SAMD21s. When envoked, the method will affect native `analogRead()` as well, not only the FastAnalogRead.
+Arduino's analog reading is really slow, too. It may take as long as several milliseconds to do the thing, and, counter-intuitively, it's even worse on newer ARM-based Arduinos. That's why this library can use the [approach discussed here](https://www.avdweb.nl/arduino/adc-dac/fast-10-bit-adc). The ADC speed-up is off by default, but there are static methods that enable or disable it on AVRs and SAMD21s. When envoked, the method will have a global effect, affecting plain `analogRead()` as well.
 
 So, how fast is it? I've benchmarked an Arduino Leonardo and an Arduino MKR Zero, by making 20000 readings on a single floating ADC pin:
 
@@ -27,12 +29,12 @@ While it's shocking to see how ARM-based Arduinos are actually four times slower
 
 What's the catch? Oh why, I'm glad you asked. Obviously, by replacing floats with fixes and by speeding up the ADC we're losing precision. The comparison of different ADC speeds [has already been made](https://www.avdweb.nl/arduino/adc-dac/fast-10-bit-adc), how about floats vs fixes? All values correspond to the ADC resolution, i.e. it's 6 out of 1024 for AVR and 83 out of 4096 for ARM.
 
-|            | Average delta, stock ADC | Max delta, stock ADC | Average delta, fast ADC | Max delta, fast ADC |
+|            | Avg. delta, stock ADC | Max. delta, stock ADC | Avg. delta, fast ADC | Max. delta, fast ADC |
 | --- | --- | --- | --- | --- |
 | Arduino Leonardo | 0 | 6  | 0 | 1 |
 | Arduino MKR Zero | 0 | 83 | 0 | 13 | 
 
-So, I believe this kind of precision tradeoff is more than acceptable, when it comes to a floating (i.e., random) pin! If you need extra precision, you would want to begin with reducing noise in your analog line in the first place...
+So, I believe this kind of precision tradeoff is more than acceptable! A real-world potentiometer has much less drift than a floating pin, which is essentially pure noise. And if you need extra precision, you will want to begin with reducing noise in your hardware in the first place.
 
 ## Pros and cons
 
@@ -115,6 +117,8 @@ void loop() {
 
 ### Using your own ADC
 
+FastAnalogRead supports ADCs with up to 16 bit resolution. If your ADC is 16 bit, add `define FAST_ANALOG_16BIT` line before `#include <FastAnalogRead.h>`.
+
 ```Arduino
 #include <FastAnalogRead.h>
 
@@ -173,15 +177,29 @@ void loop() {
 
 ## How to install
 
-In the Arduino IDE, go to Sketch > Include libraries > Manage libraries, and search for FastAnalogRead.
-You can also just use the files directly from the src folder.
-
-You also need [FixedPoints](https://github.com/Pharap/FixedPointsArduino) library, which can be done in exactly the same way.
-
 Look at the example in the examples folder for an idea on how to use it in your own projects.
 The source files are also heavily commented, so check those out if you want fine control of the library's behaviour.
 
-## Constructor arguments
+### Arduino IDE
+The library is not available in the Library manager yet. Go to your Preferences, open "Additional Board Manager URLs" by clicking a small button next to the text field and add a line there:
+`https://raw.githubusercontent.com/homeodor/FastAnalogRead/master/library.json`
+
+... or you can just download this library as a ZIP file and add the library as a ZIP.
+
+### PlatformIO
+
+Add `FastAnalogRead` to your lib_deps. Easy!
+
+### Dependencies
+
+You also need [FixedPoints](https://github.com/Pharap/FixedPointsArduino) library, which can be installed through Sketch > Include libraries > Manage libraries.
+
+## A note on function parameters
+
+You can use a float value as a parameter of certain functions despite it being defined as `FastAnalogFixed`, i.e.:
+`analog.setSnapMultiplier(4.0) // perfectly fine` 
+
+## Constuctor and .begin arguments
 
 - `pin` - int, the pin to read (e.g. A0).
 - `sleepEnable` - boolean, sets whether sleep is enabled. Defaults to true. Enabling sleep will cause values to take less time to stop changing and potentially stop changing more abruptly, where as disabling sleep will cause values to ease into their correct position smoothly.
@@ -217,10 +235,10 @@ Sleep allows you to minimise the amount of responsive value changes over time. I
 3. It classifies changes in the input voltage as being "active" or not. A lack of activity tells it to sleep.
 
 ### Activity threshold
-- `void setActivityThreshold(float newThreshold) // the amount of movement that must take place for it to register as activity and start moving the output value. Defaults to 4.0. (version 1.1+)`
+- `void setActivityThreshold(FastAnalogFixed newThreshold) // the amount of movement that must take place for it to register as activity and start moving the output value. Defaults to 4.0. (version 1.1+)`
 
 ### Snap multiplier
-- `void setSnapMultiplier(float newMultiplier)`
+- `void setSnapMultiplier(FastAnalogFixed newMultiplier)`
 
 SnapMultiplier is a value from 0 to 1 that controls the amount of easing. Increase this to lessen the amount of easing (such as 0.1) and make the responsive values more responsive, but doing so may cause more noise to seep through when sleep is not enabled.
 
@@ -228,7 +246,7 @@ SnapMultiplier is a value from 0 to 1 that controls the amount of easing. Increa
 - `void enableEdgeSnap() // edge snap ensures that values at the edges of the spectrum (0 and 1023) can be easily reached when sleep is enabled`
 
 ### Analog resolution
-- `void setAnalogResolution(int resolution)`
+- `void setAnalogResolution(uint16_t resolution)`
 
 If your ADC is something other than 10bit (1024), set that using this.
 
